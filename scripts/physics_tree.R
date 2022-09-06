@@ -2,7 +2,19 @@
 ###   FUNCTIONS                                                             ###
 ###############################################################################
 
+make_layout <- function(graph, geneal) {
+  l <- data.frame(x = geneal$year,
+                  y = 0)
+  return(l)
+}
 
+getGen <- function(v1, geneal) {
+  ancestors <- getAncestors(v1, geneal, dim(genealogy)[1])
+  if(dim(ancestors)[1])
+    return(max(ancestors$gen)+1)
+  else
+    return(1)
+}
 
 ###############################################################################
 ###   READ DATA                                                             ###
@@ -24,21 +36,25 @@ spreadsheet <- read_xlsx(paste(data.dir,filename,sep="/"),
 ###   CREATE GENEALOGY                                                      ###
 ###############################################################################
 
-genealogy <- data.frame(child = paste(spreadsheet$`Imię Doktoranta`, spreadsheet$`Nazwisko Doktoranta`, sep = "\n"),
-                        parent = paste(spreadsheet$`Imię Promotora`, spreadsheet$`Nazwisko Promotora`, sep = "\n"),
-                        year = spreadsheet$`Rok obrony doktoratu`,
+genealogy <- data.frame(child = paste(spreadsheet$`Imię Doktoranta`, spreadsheet$`Nazwisko Doktoranta`),
+                        parent = paste(spreadsheet$`Imię Promotora`, spreadsheet$`Nazwisko Promotora`),
+                        year = as.character(spreadsheet$`Rok obrony doktoratu`),
                         university = spreadsheet$`Uczelnia nadająca stopień doktora Doktorantowi`)
 
-genealogy$parent <- replace(genealogy$parent, which(genealogy$parent=="NA\nNA"), NA)
+genealogy$parent <- replace(genealogy$parent, which(genealogy$parent=="NA NA"), NA)
 
 ###############################################################################
 ###   CREATE TREE                                                           ###
 ###############################################################################
 
+library(igraph)
 library(ggenealogy)
 
 ig <- dfToIG(genealogy, vertexinfo = c("year","university"))
-getBasicStatistics(ig)
+bs <- getBasicStatistics(ig)
+ig.comp <- components(ig)
+genealogy$tree.id <- ig.comp$membership
+genealogy$gen <- sapply(genealogy$child, getGen, genealogy)
 
 ###############################################################################
 ###   PLOTS                                                                 ###
@@ -47,22 +63,17 @@ getBasicStatistics(ig)
 library(ggraph)
 library(magrittr)
 
-my_theme <- theme_minimal() + theme(panel.grid.minor.x = element_blank(),
-                                    panel.grid.major.x = element_blank(),
-                                    axis.title.x = element_blank(),
-                                    axis.text.x = element_blank(),
-                                    axis.ticks.x = element_blank())
+my_theme <- theme_minimal() + theme(panel.grid.minor.y = element_blank(),
+                                    panel.grid.major.y = element_blank(),
+                                    axis.title.y = element_blank(),
+                                    axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank())
 
-ig %>%
-  create_layout(layout = "sugiyama") -> lay
+my_layout <- make_layout(ig, genealogy)
 
-lay$y <- lay$x
-lay$x <- lay$year
-
-ggraph(lay) +
+ggraph(ig, layout = my_layout) +
   my_theme +
   geom_node_text( aes(label=name), size=1 ) +
-  geom_edge_link( arrow = arrow(length = unit(1,"mm")),
-                  start_cap = circle(3, "mm"),
+  geom_edge_link( start_cap = circle(3, "mm"),
                   end_cap = circle(3, "mm"))
-ggsave("../plots/drzewo2.png", device="png", width = 30, height = 50, units = "cm")
+ggsave("../plots/drzewo3.png", device="png", width = 30, height = 50, units = "cm")
